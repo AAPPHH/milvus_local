@@ -1,3 +1,4 @@
+
 # 🧠 CLIP Image Search with Milvus
 
 Ein einfaches System zur Vektorisierung und Suche von Bildern basierend auf OpenAI's [CLIP](https://github.com/openai/CLIP) und [Milvus](https://milvus.io/).
