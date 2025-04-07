@@ -59,10 +59,9 @@ class CLIPImageIndexer:
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=False),
             FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=self.dim),
-            FieldSchema(name="label", dtype=DataType.VARCHAR, max_length=100),
             FieldSchema(name="path", dtype=DataType.VARCHAR, max_length=255)  # Field to store the image path
         ]
-        schema = CollectionSchema(fields, description="CLIP Image Embeddings with Labels and Paths")
+        schema = CollectionSchema(fields, description="CLIP Image Embeddings with Paths")
         self.collection = Collection(name=self.collection_name, schema=schema)
 
         # Create index for the embedding field
@@ -103,27 +102,22 @@ class CLIPImageIndexer:
         """
         Generator that iterates over all images in image_dir and generates their embeddings.
         The embeddings are collected in batches and, once the batch size is reached,
-        a tuple (batch_ids, batch_vecs, batch_labels, batch_paths) is returned.
+        a tuple (batch_ids, batch_vecs, batch_paths) is returned.
         Before processing, it checks if the image path is already present in Milvus.
         """
         batch_ids = []
         batch_vecs = []
-        batch_labels = []
         batch_paths = []
 
         current_idx = 0
 
         for root, _, files in os.walk(self.image_dir):
-            folder = os.path.basename(root)
-            label = folder.split("-")[1] if "-" in folder else folder
-
             for file in files:
                 if file.lower().endswith((".jpg", ".jpeg", ".png")):
                     image_path = os.path.join(root, file)
 
                     # Escape backslashes in the path so that Milvus parses the query correctly.
                     escaped_path = image_path.replace("\\", "\\\\")
-                    # Use the "in" operator instead of ==
                     query_expr = f'path in ["{escaped_path}"]'
                     
                     # Check if the image has already been indexed.
@@ -144,20 +138,19 @@ class CLIPImageIndexer:
                         embedding = self._image_to_vector(image_path)
                         batch_ids.append(current_idx)
                         batch_vecs.append(embedding)
-                        batch_labels.append(label)
                         batch_paths.append(image_path)
 
-                        print(f"✅ [{current_idx}] {os.path.basename(image_path)} → Label: {label}")
+                        print(f"✅ [{current_idx}] {os.path.basename(image_path)} indexed.")
                         current_idx += 1
 
                         if len(batch_ids) == self.batch_size:
-                            yield batch_ids, batch_vecs, batch_labels, batch_paths
-                            batch_ids, batch_vecs, batch_labels, batch_paths = [], [], [], []
+                            yield batch_ids, batch_vecs, batch_paths
+                            batch_ids, batch_vecs, batch_paths = [], [], []
                     except Exception as e:
                         print(f"⚠️  Error processing {image_path}: {e}")
 
         if batch_ids:
-            yield batch_ids, batch_vecs, batch_labels, batch_paths
+            yield batch_ids, batch_vecs, batch_paths
 
     def index_images(self):
         """
@@ -167,17 +160,17 @@ class CLIPImageIndexer:
         print("🔍 Searching through the image directory...")
         total_inserted = 0
 
-        for batch_ids, batch_vecs, batch_labels, batch_paths in self._generate_embeddings():
-            self._insert_and_flush(batch_ids, batch_vecs, batch_labels, batch_paths)
+        for batch_ids, batch_vecs, batch_paths in self._generate_embeddings():
+            self._insert_and_flush(batch_ids, batch_vecs, batch_paths)
             total_inserted += len(batch_ids)
 
         print(f"\n🚀 A total of {total_inserted} new vectors have been inserted.")
 
-    def _insert_and_flush(self, batch_ids, batch_vecs, batch_labels, batch_paths):
+    def _insert_and_flush(self, batch_ids, batch_vecs, batch_paths):
         """
         Inserts a batch of embeddings into Milvus and flushes the collection.
         """
-        self.collection.insert([batch_ids, batch_vecs, batch_labels, batch_paths])
+        self.collection.insert([batch_ids, batch_vecs, batch_paths])
         self.collection.flush()
         print(f"✅ Batch inserted: {len(batch_ids)} entries.")
 
