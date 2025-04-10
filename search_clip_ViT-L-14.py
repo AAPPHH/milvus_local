@@ -39,7 +39,9 @@ class CLIPImageSearcher:
             model_name="ViT-L-14",     # Consistent with the indexer code
             pretrained="openai",       # OpenAI pretrained weights
             precision='fp16',          # FP16 precision for memory efficiency
-            device=self.device
+            device=self.device,
+            force_quick_gelu=True,
+            jit=True
         )
         self.model.eval()
 
@@ -57,15 +59,14 @@ class CLIPImageSearcher:
         Converts an image to a normalized OpenCLIP embedding vector.
 
         :param image_path: Path to the image.
-        :return: Normalized embedding vector.
+        :return: Normalized embedding vector (as a PyTorch tensor).
         """
         img = Image.open(image_path).convert("RGB")
         image_input = self.preprocess(img).unsqueeze(0).to(self.device).half()
         with torch.no_grad():
             features = self.model.encode_image(image_input, normalize=True)
-        features = features.cpu().numpy().flatten()
-        norm = np.linalg.norm(features)
-        return features / norm if norm != 0 else features
+        return features.flatten()
+
 
     def _text_to_vector(self, query_text):
         """
